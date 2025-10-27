@@ -30,32 +30,103 @@ cd PyOmron-FINS-Complete
 
 ## Uso Básico
 
+### Método Simplificado (Recomendado)
 ```python
 from pyomron_fins import FinsClient
 
-# Configuración para OMRON CJ1H
-config = {
-    'host': '192.168.1.100',    # IP del PLC
-    'port': 9600,               # Puerto FINS
-    'protocol': 'udp',          # UDP más rápido
-    'ICF': 0x80, 'DNA': 0x00, 'DA1': 0x00, 'DA2': 0x00,
-    'SNA': 0x00, 'SA1': 0x01, 'SA2': 0x00
-}
+# Configuración ultra-simple (¡una sola línea!)
+config = FinsClient.simple_config('192.168.140.10')
 
-# Usar con context manager (recomendado)
+# Usar con context manager
 with FinsClient(**config) as client:
-    # Leer valor entero
-    valor = client.read('D100')[0]
-    print(f"D100: {valor}")
-    
-    # Leer valor real (float)
-    temperatura = client.read_real('D1702')
-    print(f"Temperatura: {temperatura:.2f}")
-    
-    # Escribir valores
-    client.write('D200', 12345)
-    client.write_real('D1710', 3.14159)
+    valor = client.read('D0')[0]          # Leer entero
+    temp = client.read_real('D1702')      # Leer float
+    client.write('D200', 12345)           # Escribir entero
+    client.write_real('D1710', 3.14)     # Escribir float
 ```
+
+### Método Avanzado con Nodos
+```python
+from pyomron_fins import FinsClient, FinsNode
+
+# Crear nodos de manera intuitiva
+plc = FinsNode.plc_node(node=0, network=0)  # PLC en red 0, nodo 0
+pc = FinsNode.pc_node(node=1, network=0)    # PC en red 0, nodo 1
+
+# Configuración avanzada
+config = FinsClient.create_config(
+    host='192.168.140.10',
+    plc_node=plc,
+    pc_node=pc,
+    protocol='udp'
+)
+
+with FinsClient(**config) as client:
+    # Operaciones...
+```
+
+### Conexión Rápida
+```python
+# Conexión instantánea
+client = FinsClient.quick_connect('192.168.140.10')
+# Cliente ya conectado y listo para usar
+data = client.read('DM100')
+client.disconnect()
+```
+
+## API Simplificada
+
+### Clase FinsNode
+Representa un dispositivo en la red FINS de manera intuitiva:
+
+```python
+from pyomron_fins import FinsNode
+
+# Crear nodos de manera intuitiva
+plc = FinsNode.plc_node(node=0)        # PLC en nodo 0
+pc = FinsNode.pc_node(node=1)          # PC en nodo 1
+
+# O crear nodos personalizados
+dispositivo = FinsNode(network=1, node=10, unit=0)  # Red 1, nodo 10, unidad 0
+```
+
+### Métodos de Configuración Simplificada
+
+#### `FinsClient.simple_config()`
+Para configuraciones básicas:
+```python
+config = FinsClient.simple_config(
+    host='192.168.1.100',  # IP del PLC
+    plc_node=0,             # Nodo del PLC (default 0)
+    pc_node=1,              # Nodo de la PC (default 1)
+    protocol='udp'          # Protocolo (default 'udp')
+)
+```
+
+#### `FinsClient.create_config()`
+Para configuraciones avanzadas:
+```python
+config = FinsClient.create_config(
+    host='192.168.1.100',
+    plc_node=FinsNode.plc_node(node=5, network=1),  # PLC en red 1, nodo 5
+    pc_node=FinsNode.pc_node(node=10, network=1),   # PC en red 1, nodo 10
+    timeout=10.0
+)
+```
+
+#### `FinsClient.quick_connect()`
+Conexión instantánea:
+```python
+client = FinsClient.quick_connect('192.168.1.100')
+# Cliente ya conectado y listo para usar
+```
+
+### Beneficios de la Nueva API
+- **Abstracción completa** de valores hexadecimales FINS
+- **Configuración intuitiva** con nombres descriptivos
+- **Menos propenso a errores** en configuración
+- **Compatible hacia atrás** con configuraciones tradicionales
+- **Soporte para redes complejas** con múltiples dispositivos
 
 ## Funcionalidades Verificadas
 
@@ -151,7 +222,7 @@ from pyomron_fins.exceptions import FinsError, ReadError, WriteError
 try:
     with FinsClient(**config) as client:
         valor = client.read('D100')[0]
-except ConnectionError:
+excep ConnectionError:
     print("No se pudo conectar al PLC")
 except ReadError as e:
     print(f"Error leyendo: {e}")
