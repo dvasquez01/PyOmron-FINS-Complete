@@ -13,6 +13,60 @@ from typing import Union, List, Dict, Any, Optional, Tuple
 from .exceptions import FinsError, ConnectionError, TimeoutError, ReadError, WriteError, InvalidAddressError
 
 
+class FinsNode:
+    """
+    Representa un nodo FINS en la red (PLC o dispositivo)
+    
+    Simplifica la configuración de direcciones FINS abstrayendo los valores hexadecimales.
+    """
+    
+    def __init__(self, network: int = 0, node: int = 0, unit: int = 0):
+        """
+        Inicializar un nodo FINS
+        
+        Args:
+            network: Número de red (0-127, normalmente 0 para red local)
+            node: Número de nodo (0-254, 0 para PLC, 1+ para otros dispositivos)
+            unit: Número de unidad (0-15, normalmente 0 para CPU principal)
+        """
+        if not (0 <= network <= 127):
+            raise ValueError("Network debe estar entre 0-127")
+        if not (0 <= node <= 254):
+            raise ValueError("Node debe estar entre 0-254")
+        if not (0 <= unit <= 15):
+            raise ValueError("Unit debe estar entre 0-15")
+            
+        self.network = network
+        self.node = node
+        self.unit = unit
+    
+    def to_fins_params(self) -> Dict[str, int]:
+        """
+        Convertir a parámetros FINS tradicionales
+        
+        Returns:
+            Diccionario con parámetros SNA/SA1/SA2 o DNA/DA1/DA2 según el contexto
+        """
+        return {
+            'network': self.network,
+            'node': self.node,
+            'unit': self.unit
+        }
+    
+    @classmethod
+    def plc_node(cls, node: int = 0, network: int = 0) -> 'FinsNode':
+        """Crear un nodo para PLC (unidad 0)"""
+        return cls(network=network, node=node, unit=0)
+    
+    @classmethod
+    def pc_node(cls, node: int = 1, network: int = 0) -> 'FinsNode':
+        """Crear un nodo para PC/computadora (unidad 0)"""
+        return cls(network=network, node=node, unit=0)
+    
+    def __str__(self):
+        return f"Red{self.network}.Nodo{self.node}.Unidad{self.unit}"
+
+
 class FinsAddress:
     """Represents a FINS memory address"""
     
@@ -504,6 +558,141 @@ class FinsClient:
                 
         except Exception as e:
             raise FinsError(f"Failed to read clock: {e}")
+    
+    @classmethod
+    def create_config(cls,
+                     host: str,
+                     port: int = 9600,
+                     protocol: str = 'udp',
+                     timeout: float = 5.0,
+                     plc_node: Union[FinsNode, int] = None,
+                     pc_node: Union[FinsNode, int] = None,
+                     icf: int = 0x80) -> Dict[str, Any]:
+        """
+        Crear configuración FINS de manera intuitiva
+        
+        Args:
+            host: Dirección IP del PLC
+            port: Puerto FINS (default 9600)
+            protocol: Protocolo ('udp' o 'tcp')
+            timeout: Timeout en segundos
+            plc_node: Nodo del PLC (FinsNode o int para nodo simple)
+            pc_node: Nodo de la PC (FinsNode o int para nodo simple)
+            icf: Information Control Field (default 0x80)
+            
+        Returns:
+            Diccionario de configuración listo para FinsClient
+            
+        Examples:
+            # Configuración simple
+            config = FinsClient.create_config(
+                host='192.168.1.100',
+                plc_node=0,  # PLC en nodo 0
+                pc_node=1    # PC en nodo 1
+            )
+            
+            # Configuración avanzada con FinsNode
+            plc = FinsNode.plc_node(node=5, network=1)
+            pc = FinsNode.pc_node(node=10, network=1)
+            config = FinsClient.create_config(
+                host='192.168.1.100',
+                plc_node=plc,
+                pc_node=pc
+            )
+        """
+        # Procesar nodos
+        if plc_node is None:
+            plc_node = FinsNode.plc_node(0)  # PLC por defecto en nodo 0
+        elif isinstance(plc_node, int):
+            plc_node = FinsNode.plc_node(plc_node)
+            
+        if pc_node is None:
+            pc_node = FinsNode.pc_node(1)  # PC por defecto en nodo 1
+        elif isinstance(pc_node, int):
+            pc_node = FinsNode.pc_node(pc_node)
+        
+        # Validar que estén en la misma red
+        if plc_node.network != pc_node.network:
+            print(f"Advertencia: PLC y PC están en redes diferentes ({plc_node.network} vs {pc_node.network})")
+        
+        config = {
+            'host': host,
+            'port': port,
+            'protocol': protocol,
+            'timeout': timeout,
+            'ICF': icf,
+            # PLC como destino
+            'DNA': plc_node.network,  # Destination Network Address
+            'DA1': plc_node.node,    # Destination Node Address
+            'DA2': plc_node.unit,    # Destination Unit Address
+            # PC como origen
+            'SNA': pc_node.network,  # Source Network Address
+            'SA1': pc_node.node,    # Source Node Address
+            'SA2': pc_node.unit,    # Source Unit Address
+        }
+        
+        return config
+    
+    @classmethod
+    def simple_config(cls,
+                     host: str,
+                     plc_node: int = 0,
+                     pc_node: int = 1,
+                     protocol: str = 'udp',
+                     port: int = 9600) -> Dict[str, Any]:
+        """
+        Configuración FINS ultra-simple para casos comunes
+        
+        Args:
+            host: IP del PLC
+            plc_node: Número de nodo del PLC (default 0)
+            pc_node: Número de nodo de la PC (default 1)
+            protocol: Protocolo ('udp' o 'tcp', default 'udp')
+            port: Puerto (default 9600)
+            
+        Returns:
+            Configuración lista para usar
+            
+        Example:
+            config = FinsClient.simple_config('192.168.1.100')
+            with FinsClient(**config) as client:
+                data = client.read('DM100')
+        """
+        return cls.create_config(
+            host=host,
+            port=port,
+            protocol=protocol,
+            plc_node=plc_node,
+            pc_node=pc_node
+        )
+    
+    @classmethod
+    def quick_connect(cls,
+                     host: str,
+                     plc_node: int = 0,
+                     pc_node: int = 1,
+                     protocol: str = 'udp') -> 'FinsClient':
+        """
+        Conexión rápida con configuración automática
+        
+        Args:
+            host: IP del PLC
+            plc_node: Nodo del PLC (default 0)
+            pc_node: Nodo de la PC (default 1)
+            protocol: Protocolo ('udp' o 'tcp')
+            
+        Returns:
+            Instancia de FinsClient conectada
+            
+        Example:
+            client = FinsClient.quick_connect('192.168.1.100')
+            data = client.read('DM100')
+            client.disconnect()
+        """
+        config = cls.simple_config(host, plc_node, pc_node, protocol)
+        client = cls(**config)
+        client.connect()
+        return client
     
     def __enter__(self):
         """Context manager entry"""
