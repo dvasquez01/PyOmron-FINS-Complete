@@ -15,7 +15,7 @@ Versión: 1.0.0
 Autor: Desarrollado para aplicaciones industriales
 """
 
-from .fins_client import FinsClient
+from .fins_client import FinsClient, FinsNode, FinsAddress
 from .exceptions import FinsError, ReadError, WriteError, ConnectionError
 
 __version__ = "1.0.0"
@@ -24,6 +24,8 @@ __description__ = "Librería Python para comunicación FINS con PLC OMRON"
 
 __all__ = [
     'FinsClient',
+    'FinsNode',
+    'FinsAddress',
     'FinsError',
     'ReadError',
     'WriteError',

@@ -13,7 +13,7 @@ from pathlib import Path
 # Agregar el directorio del paquete al path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pyomron_fins import FinsClient
+from pyomron_fins import FinsClient, FinsNode
 
 def ejemplo_configuracion_simple():
     """Ejemplo de configuración ultra-simple"""
